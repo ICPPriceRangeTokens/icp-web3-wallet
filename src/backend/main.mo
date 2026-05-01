@@ -1,0 +1,1018 @@
+import Map "mo:core/Map";
+import List "mo:core/List";
+import Nat "mo:core/Nat";
+import Time "mo:core/Time";
+import Iter "mo:core/Iter";
+import Text "mo:core/Text";
+import Array "mo:core/Array";
+import Principal "mo:core/Principal";
+import Runtime "mo:core/Runtime";
+import Storage "blob-storage/Storage";
+import Stripe "stripe/stripe";
+import OutCall "http-outcalls/outcall";
+import MixinAuthorization "authorization/MixinAuthorization";
+import MixinStorage "blob-storage/Mixin";
+import AccessControl "authorization/access-control";
+
+actor {
+  var plans : Map.Map<Nat, Plan> = Map.empty<Nat, Plan>();
+  var subscriptions : Map.Map<Text, Subscription> = Map.empty<Text, Subscription>();
+  var files : Map.Map<Nat, FileRecord> = Map.empty<Nat, FileRecord>();
+  var userFiles : Map.Map<Text, List.List<Nat>> = Map.empty<Text, List.List<Nat>>();
+  var folders : Map.Map<Nat, FolderRecord> = Map.empty<Nat, FolderRecord>();
+  var userFolders : Map.Map<Text, List.List<Nat>> = Map.empty<Text, List.List<Nat>>();
+  var processedBlocks : Map.Map<Nat, Bool> = Map.empty<Nat, Bool>();
+  var nextFileId : Nat = 1;
+  var nextFolderId : Nat = 1;
+  var adminPrincipal : ?Principal = null;
+  var paymentDestination : ?Text = null;
+  var stripeConfiguration : ?Stripe.StripeConfiguration = null;
+
+  let accessControlState = AccessControl.initState();
+  include MixinAuthorization(accessControlState);
+  include MixinStorage();
+
+  public shared ({ caller }) func setAdminPrincipal(admin : Principal) : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can set admin principal");
+    };
+    adminPrincipal := ?admin;
+  };
+
+  public query ({ caller }) func getAdminPrincipal() : async ?Principal {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can view admin principal");
+    };
+    adminPrincipal;
+  };
+
+  public shared ({ caller }) func setPaymentDestination(destination : Text) : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can set payment destination");
+    };
+    paymentDestination := ?destination;
+  };
+
+  public query ({ caller }) func getPaymentDestination() : async ?Text {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      return null;
+    };
+    paymentDestination;
+  };
+
+  public shared ({ caller }) func setStripeConfiguration(config : Stripe.StripeConfiguration) : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can perform this action");
+    };
+    stripeConfiguration := ?config;
+  };
+
+  public query func isStripeConfigured() : async Bool {
+    switch (stripeConfiguration) {
+      case (null) { false };
+      case (?_) { true };
+    };
+  };
+
+  func getStripeConfiguration() : Stripe.StripeConfiguration {
+    switch (stripeConfiguration) {
+      case (null) { Runtime.trap("Stripe needs to be first configured") };
+      case (?value) { value };
+    };
+  };
+
+  public shared ({ caller }) func getStripeSessionStatus(sessionId : Text) : async Stripe.StripeSessionStatus {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can check session status");
+    };
+    await Stripe.getSessionStatus(getStripeConfiguration(), sessionId, transform);
+  };
+
+  public query func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
+    OutCall.transform(input);
+  };
+
+  public shared ({ caller }) func createCheckoutSession(items : [Stripe.ShoppingItem], successUrl : Text, cancelUrl : Text) : async Text {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can create checkout sessions");
+    };
+    await Stripe.createCheckoutSession(getStripeConfiguration(), caller, items, successUrl, cancelUrl, transform);
+  };
+
+  public type UserProfile = {
+    name : Text;
+    email : Text;
+  };
+
+  let userProfiles = Map.empty<Principal, UserProfile>();
+
+  public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
+    if (caller.isAnonymous()) {
+      return null;
+    };
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return null;
+    };
+    userProfiles.get(caller);
+  };
+
+  public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
+    if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Can only view your own profile");
+    };
+    userProfiles.get(user);
+  };
+
+  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can save profiles");
+    };
+    userProfiles.add(caller, profile);
+  };
+
+  public type Plan = {
+    planId : Nat;
+    storageLimitBytes : Nat;
+    durationSeconds : Nat;
+    priceE8s : Nat;
+    active : Bool;
+  };
+
+  public type SubscriptionStatus = {
+    #active;
+    #revoked;
+  };
+
+  public type Subscription = {
+    principal : Principal;
+    planId : Nat;
+    storageLimitBytes : Nat;
+    usedStorageBytes : Nat;
+    startTime : Time.Time;
+    endTime : Time.Time;
+    status : SubscriptionStatus;
+  };
+
+  public type SubscribedUserEntry = {
+    principal : Principal;
+    planId : Nat;
+    storageLimitBytes : Nat;
+    startTime : Time.Time;
+    endTime : Time.Time;
+    status : SubscriptionStatus;
+  };
+
+  public type FileRecord = {
+    fileId : Nat;
+    ownerPrincipal : Principal;
+    fileName : Text;
+    fileSize : Nat;
+    contentType : Text;
+    uploadTime : Time.Time;
+    blobData : Storage.ExternalBlob;
+    folderId : ?Nat;
+  };
+
+  public type FileMetadata = {
+    fileId : Nat;
+    ownerPrincipal : Principal;
+    fileName : Text;
+    fileSize : Nat;
+    contentType : Text;
+    uploadTime : Time.Time;
+    folderId : ?Nat;
+  };
+
+  public type FolderRecord = {
+    folderId : Nat;
+    folderName : Text;
+    ownerPrincipal : Principal;
+    createTime : Time.Time;
+  };
+
+  func hasAnySubscription(user : Principal) : Bool {
+    switch (subscriptions.get(user.toText())) {
+      case (null) { false };
+      case (?_sub) { true };
+    };
+  };
+
+  func requireActiveSubscriptionOrAdmin(caller : Principal) {
+    if (AccessControl.isAdmin(accessControlState, caller)) {
+      return;
+    };
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only authenticated users can perform this action");
+    };
+    let principalText = caller.toText();
+    switch (subscriptions.get(principalText)) {
+      case (null) {
+        Runtime.trap("Unauthorized: An active subscription is required to perform this action");
+      };
+      case (?sub) {
+        switch (sub.status) {
+          case (#revoked) {
+            Runtime.trap("Unauthorized: Your subscription has been revoked");
+          };
+          case (#active) {};
+        };
+      };
+    };
+  };
+
+  func requireAnySubscriptionOrAdmin(caller : Principal) {
+    if (AccessControl.isAdmin(accessControlState, caller)) {
+      return;
+    };
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only authenticated users can perform this action");
+    };
+    if (not hasAnySubscription(caller)) {
+      Runtime.trap("Unauthorized: A subscription is required to perform this action");
+    };
+  };
+
+  public shared ({ caller }) func createPlan(plan : Plan) : async Bool {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can create plans");
+    };
+    plans.add(plan.planId, plan);
+    true;
+  };
+
+  public shared ({ caller }) func updatePlan(plan : Plan) : async Bool {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can update plans");
+    };
+    plans.add(plan.planId, plan);
+    true;
+  };
+
+  public shared ({ caller }) func deletePlan(planId : Nat) : async Bool {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can delete plans");
+    };
+    plans.remove(planId);
+    true;
+  };
+
+  public query func listPlans() : async [Plan] {
+    plans.values().toArray();
+  };
+
+  public query ({ caller }) func getPurchaseDetails(planId : Nat) : async (Text, Nat) {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can get purchase details");
+    };
+    switch (plans.get(planId)) {
+      case (null) { Runtime.trap("Plan not found") };
+      case (?plan) {
+        if (not plan.active) {
+          Runtime.trap("Plan is not active");
+        };
+        switch (paymentDestination) {
+          case (null) { Runtime.trap("Payment destination not set") };
+          case (?dest) { (dest, plan.priceE8s) };
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func activateSubscription(planId : Nat, blockIndex : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can activate subscriptions");
+    };
+    switch (plans.get(planId)) {
+      case (null) { Runtime.trap("Plan not found") };
+      case (?plan) {
+        if (not plan.active) {
+          Runtime.trap("Plan is not active");
+        };
+        switch (processedBlocks.get(blockIndex)) {
+          case (?_) { Runtime.trap("Replay detected: block index already processed") };
+          case (null) { processedBlocks.add(blockIndex, true) };
+        };
+
+        let currentTime = Time.now();
+        let principalText = caller.toText();
+
+        let existingUsedBytes = switch (subscriptions.get(principalText)) {
+          case (null) { 0 };
+          case (?existing) { existing.usedStorageBytes };
+        };
+
+        let newSubscription : Subscription = {
+          principal = caller;
+          planId = plan.planId;
+          storageLimitBytes = plan.storageLimitBytes;
+          usedStorageBytes = existingUsedBytes;
+          startTime = currentTime;
+          endTime = currentTime + (plan.durationSeconds * 1_000_000_000);
+          status = #active;
+        };
+
+        subscriptions.add(principalText, newSubscription);
+      };
+    };
+  };
+
+  public query ({ caller }) func purchaseSubscription(planId : Nat) : async (Text, Nat) {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can purchase subscriptions");
+    };
+    switch (plans.get(planId)) {
+      case (null) { Runtime.trap("Plan not found") };
+      case (?plan) {
+        if (not plan.active) {
+          Runtime.trap("Plan is not active");
+        };
+        switch (paymentDestination) {
+          case (null) { Runtime.trap("Payment destination not set") };
+          case (?dest) { (dest, plan.priceE8s) };
+        };
+      };
+    };
+  };
+
+  public query func checkHasActiveSubscription(user : Principal) : async Bool {
+    switch (subscriptions.get(user.toText())) {
+      case (null) { false };
+      case (?sub) { switch (sub.status) { case (#active) { true }; case (#revoked) { false } } };
+    };
+  };
+
+  public query ({ caller }) func getSubscription() : async ?Subscription {
+    if (caller.isAnonymous()) {
+      return null;
+    };
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return null;
+    };
+    subscriptions.get(caller.toText());
+  };
+
+  public shared ({ caller }) func adminRevokeSubscription(user : Principal) : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admin can revoke subscriptions");
+    };
+    let userText = user.toText();
+    switch (subscriptions.get(userText)) {
+      case (null) { Runtime.trap("No subscription found for user: " # userText) };
+      case (?sub) {
+        subscriptions.add(userText, { sub with status = #revoked });
+      };
+    };
+  };
+
+  public shared ({ caller }) func adminDeleteUserSubscription(user : Principal) : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admin can delete user subscriptions");
+    };
+    let userText = user.toText();
+    switch (subscriptions.get(userText)) {
+      case (null) { Runtime.trap("No subscription found for user: " # userText) };
+      case (_) {
+        deleteUserFilesAndFolders(userText);
+        subscriptions.remove(userText);
+      };
+    };
+  };
+
+  func deleteUserFilesAndFolders(userText : Text) {
+    let fileIdsToDelete = switch (userFiles.get(userText)) {
+      case (null) { List.empty<Nat>() };
+      case (?ids) { ids };
+    };
+
+    var totalDeletedBytes : Nat = 0;
+
+    for (fileId in fileIdsToDelete.toArray().vals()) {
+      switch (files.get(fileId)) {
+        case (null) {};
+        case (?file) {
+          files.remove(fileId);
+          totalDeletedBytes += file.fileSize;
+        };
+      };
+    };
+
+    let remainingFileIds = fileIdsToDelete.toArray().filter(
+      func(id : Nat) : Bool { files.get(id) != null }
+    );
+    if (remainingFileIds.size() == 0) {
+      userFiles.remove(userText);
+    } else {
+      let remainingList = List.fromArray<Nat>(remainingFileIds);
+      userFiles.add(userText, remainingList);
+    };
+
+    switch (subscriptions.get(userText)) {
+      case (null) {};
+      case (?sub) {
+        let newUsed = if (sub.usedStorageBytes > totalDeletedBytes) {
+          sub.usedStorageBytes - totalDeletedBytes;
+        } else {
+          0;
+        };
+        subscriptions.add(
+          userText,
+          {
+            sub with
+            usedStorageBytes = newUsed;
+          },
+        );
+      };
+    };
+
+    let folderIdsToDelete = switch (userFolders.get(userText)) {
+      case (null) { List.empty<Nat>() };
+      case (?ids) { ids };
+    };
+    folderIdsToDelete.toArray().forEach(func(folderId) { folders.remove(folderId) });
+    userFolders.remove(userText);
+  };
+
+  // TRUSTS the fileSize parameter as the actual size of the file, since blobData represents
+  // a URL string reference (typically ~76 bytes) and not the actual file content.
+  // No verification against blobData.size() is performed.
+  public shared ({ caller }) func uploadFile(fileName : Text, contentType : Text, blobData : Storage.ExternalBlob, folderId : ?Nat, fileSize : Nat) : async ?Nat {
+    requireActiveSubscriptionOrAdmin(caller);
+
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      let principalText = caller.toText();
+      switch (subscriptions.get(principalText)) {
+        case (null) {
+          Runtime.trap("No subscription found");
+        };
+        case (?sub) {
+          if (sub.usedStorageBytes + fileSize > sub.storageLimitBytes) {
+            Runtime.trap(
+              "Storage limit exceeded: uploading this file would use " #
+              (sub.usedStorageBytes + fileSize).toText() #
+              " bytes but your plan only allows " #
+              sub.storageLimitBytes.toText() #
+              " bytes"
+            );
+          };
+        };
+      };
+    };
+
+    switch (folderId) {
+      case (null) {};
+      case (?fid) {
+        switch (folders.get(fid)) {
+          case (null) { Runtime.trap("Folder not found") };
+          case (?folder) {
+            if (folder.ownerPrincipal != caller and not AccessControl.isAdmin(accessControlState, caller)) {
+              Runtime.trap("Unauthorized: Folder does not belong to you");
+            };
+          };
+        };
+      };
+    };
+
+    let fileId = nextFileId;
+    nextFileId += 1;
+
+    let fileRecord : FileRecord = {
+      fileId;
+      ownerPrincipal = caller;
+      fileName;
+      fileSize;
+      contentType;
+      uploadTime = Time.now();
+      blobData;
+      folderId;
+    };
+    files.add(fileId, fileRecord);
+
+    let principalText = caller.toText();
+    let existingFiles = switch (userFiles.get(principalText)) {
+      case (null) { List.empty<Nat>() };
+      case (?list) { list };
+    };
+    existingFiles.add(fileId);
+    userFiles.add(principalText, existingFiles);
+
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      switch (subscriptions.get(principalText)) {
+        case (null) {};
+        case (?sub) {
+          subscriptions.add(
+            principalText,
+            {
+              sub with
+              usedStorageBytes = sub.usedStorageBytes + fileSize;
+            },
+          );
+        };
+      };
+    };
+
+    ?fileId;
+  };
+
+  public shared query ({ caller }) func downloadFile(fileId : Nat) : async ?Storage.ExternalBlob {
+    if (not hasAnySubscription(caller)) {
+      return null;
+    };
+    switch (files.get(fileId)) {
+      case (null) { null };
+      case (?file) {
+        if (file.ownerPrincipal != caller and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Only the file owner or an admin can download this file");
+        };
+        ?file.blobData;
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteFile(fileId : Nat) : async Bool {
+    switch (files.get(fileId)) {
+      case (null) { false };
+      case (?file) {
+        if (file.ownerPrincipal != caller) {
+          Runtime.trap("Unauthorized: Only the file owner can delete this file");
+        };
+
+        files.remove(fileId);
+
+        let ownerText = file.ownerPrincipal.toText();
+        switch (userFiles.get(ownerText)) {
+          case (null) {};
+          case (?list) {
+            let filtered = list.filter(func(id : Nat) : Bool { id != fileId });
+            userFiles.add(ownerText, filtered);
+          };
+        };
+
+        if (not AccessControl.isAdmin(accessControlState, file.ownerPrincipal)) {
+          switch (subscriptions.get(ownerText)) {
+            case (null) {};
+            case (?sub) {
+              let newUsed = if (sub.usedStorageBytes > file.fileSize) {
+                sub.usedStorageBytes - file.fileSize;
+              } else {
+                0;
+              };
+              subscriptions.add(
+                ownerText,
+                {
+                  sub with
+                  usedStorageBytes = newUsed;
+                },
+              );
+            };
+          };
+        };
+        true;
+      };
+    };
+  };
+
+  public shared ({ caller }) func adminDeleteFile(fileId : Nat) : async Bool {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can delete files via admin path");
+    };
+
+    switch (files.get(fileId)) {
+      case (null) { false };
+      case (?file) {
+        files.remove(fileId);
+
+        let ownerText = file.ownerPrincipal.toText();
+        switch (userFiles.get(ownerText)) {
+          case (null) {};
+          case (?list) {
+            let filtered = list.filter(func(id : Nat) : Bool { id != fileId });
+            userFiles.add(ownerText, filtered);
+          };
+        };
+
+        if (not AccessControl.isAdmin(accessControlState, file.ownerPrincipal)) {
+          switch (subscriptions.get(ownerText)) {
+            case (null) {};
+            case (?sub) {
+              let newUsed = if (sub.usedStorageBytes > file.fileSize) {
+                sub.usedStorageBytes - file.fileSize;
+              } else {
+                0;
+              };
+              subscriptions.add(
+                ownerText,
+                {
+                  sub with
+                  usedStorageBytes = newUsed;
+                },
+              );
+            };
+          };
+        };
+        true;
+      };
+    };
+  };
+
+  public shared ({ caller }) func adminDeleteUserFiles(userPrincipal : Principal) : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can delete user files");
+    };
+
+    let userText = userPrincipal.toText();
+
+    let fileIdsToDelete = switch (userFiles.get(userText)) {
+      case (null) { List.empty<Nat>() };
+      case (?ids) { ids };
+    };
+
+    var totalDeletedBytes : Nat = 0;
+
+    for (fileId in fileIdsToDelete.toArray().vals()) {
+      switch (files.get(fileId)) {
+        case (null) {};
+        case (?file) {
+          files.remove(fileId);
+          totalDeletedBytes += file.fileSize;
+        };
+      };
+    };
+
+    let remainingFileIds = fileIdsToDelete.toArray().filter(
+      func(id : Nat) : Bool { files.get(id) != null }
+    );
+    if (remainingFileIds.size() == 0) {
+      userFiles.remove(userText);
+    } else {
+      let remainingList = List.fromArray<Nat>(remainingFileIds);
+      userFiles.add(userText, remainingList);
+    };
+
+    switch (subscriptions.get(userText)) {
+      case (null) {};
+      case (?sub) {
+        let newUsed = if (sub.usedStorageBytes > totalDeletedBytes) {
+          sub.usedStorageBytes - totalDeletedBytes;
+        } else {
+          0;
+        };
+        subscriptions.add(
+          userText,
+          {
+            sub with
+            usedStorageBytes = newUsed;
+          },
+        );
+      };
+    };
+  };
+
+  public shared query ({ caller }) func listFiles() : async [FileMetadata] {
+    if (not hasAnySubscription(caller)) {
+      return [];
+    };
+    let principalText = caller.toText();
+    switch (userFiles.get(principalText)) {
+      case (null) { [] };
+      case (?fileIds) {
+        fileIds.toArray().map(func(id : Nat) : FileMetadata {
+          switch (files.get(id)) {
+            case (null) { Runtime.trap("Internal error: file record missing") };
+            case (?file) {
+              {
+                fileId = file.fileId;
+                ownerPrincipal = file.ownerPrincipal;
+                fileName = file.fileName;
+                fileSize = file.fileSize;
+                contentType = file.contentType;
+                uploadTime = file.uploadTime;
+                folderId = file.folderId;
+              };
+            };
+          };
+        });
+      };
+    };
+  };
+
+  public shared ({ caller }) func createFolder(folderName : Text) : async Nat {
+    requireActiveSubscriptionOrAdmin(caller);
+
+    let folderId = nextFolderId;
+    nextFolderId += 1;
+
+    let folderRecord : FolderRecord = {
+      folderId;
+      folderName;
+      ownerPrincipal = caller;
+      createTime = Time.now();
+    };
+
+    folders.add(folderId, folderRecord);
+
+    let principalText = caller.toText();
+    let existingFolders = switch (userFolders.get(principalText)) {
+      case (null) { List.empty<Nat>() };
+      case (?list) { list };
+    };
+    existingFolders.add(folderId);
+    userFolders.add(principalText, existingFolders);
+
+    folderId;
+  };
+
+  public shared ({ caller }) func renameFolder(folderId : Nat, newName : Text) : async () {
+    requireActiveSubscriptionOrAdmin(caller);
+
+    switch (folders.get(folderId)) {
+      case (null) { Runtime.trap("Folder not found") };
+      case (?folder) {
+        if (folder.ownerPrincipal != caller and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Only the folder owner or an admin can rename this folder");
+        };
+        folders.add(
+          folderId,
+          {
+            folder with
+            folderName = newName;
+          },
+        );
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteFolder(folderId : Nat) : async () {
+    requireAnySubscriptionOrAdmin(caller);
+
+    switch (folders.get(folderId)) {
+      case (null) { Runtime.trap("Folder not found") };
+      case (?folder) {
+        if (folder.ownerPrincipal != caller and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Only the folder owner or an admin can delete this folder");
+        };
+
+        let hasFiles = files.values().any(
+          func(file : FileRecord) : Bool { file.folderId == ?folderId }
+        );
+        if (hasFiles) {
+          Runtime.trap("Folder not empty. Delete or move all files first.");
+        };
+
+        folders.remove(folderId);
+
+        let principalText = folder.ownerPrincipal.toText();
+        switch (userFolders.get(principalText)) {
+          case (null) {};
+          case (?list) {
+            let filtered = list.filter(func(id : Nat) : Bool { id != folderId });
+            userFolders.add(principalText, filtered);
+          };
+        };
+      };
+    };
+  };
+
+  public shared query ({ caller }) func listUserFolders() : async [FolderRecord] {
+    if (not hasAnySubscription(caller)) {
+      return [];
+    };
+
+    let principalText = caller.toText();
+    switch (userFolders.get(principalText)) {
+      case (null) { [] };
+      case (?folderIds) {
+        folderIds.toArray().map(func(id : Nat) : FolderRecord {
+          switch (folders.get(id)) {
+            case (null) { Runtime.trap("Internal error: folder record missing") };
+            case (?folder) { folder };
+          };
+        });
+      };
+    };
+  };
+
+  public shared query ({ caller }) func listFilesInFolder(folderId : Nat) : async [FileMetadata] {
+    if (not hasAnySubscription(caller)) {
+      return [];
+    };
+
+    switch (folders.get(folderId)) {
+      case (null) { Runtime.trap("Folder not found") };
+      case (?folder) {
+        if (folder.ownerPrincipal != caller and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Folder does not belong to you");
+        };
+      };
+    };
+
+    files.values().toArray().filter(
+      func(file : FileRecord) : Bool {
+        file.folderId == ?folderId and (file.ownerPrincipal == caller or AccessControl.isAdmin(accessControlState, caller))
+      }
+    ).map(func(file : FileRecord) : FileMetadata {
+      {
+        fileId = file.fileId;
+        ownerPrincipal = file.ownerPrincipal;
+        fileName = file.fileName;
+        fileSize = file.fileSize;
+        contentType = file.contentType;
+        uploadTime = file.uploadTime;
+        folderId = file.folderId;
+      };
+    });
+  };
+
+  public query ({ caller }) func adminListUsers() : async [Subscription] {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can list users");
+    };
+    subscriptions.values().toArray();
+  };
+
+  public shared ({ caller }) func adminSetSubscription(principal : Principal, planId : Nat, startTime : Time.Time, endTime : Time.Time, status : SubscriptionStatus) : async Bool {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can set subscriptions");
+    };
+    switch (plans.get(planId)) {
+      case (null) { false };
+      case (?plan) {
+        let principalText = principal.toText();
+        let existingUsed = switch (subscriptions.get(principalText)) {
+          case (null) { 0 };
+          case (?sub) { sub.usedStorageBytes };
+        };
+        let subscription : Subscription = {
+          principal;
+          planId;
+          storageLimitBytes = plan.storageLimitBytes;
+          usedStorageBytes = existingUsed;
+          startTime;
+          endTime;
+          status;
+        };
+        subscriptions.add(principalText, subscription);
+        true;
+      };
+    };
+  };
+
+  public query ({ caller }) func adminViewUserInfos() : async [(Principal, Text, Nat, Nat, Text, Text)] {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can view user infos");
+    };
+
+    let userInfoList = List.empty<(Principal, Text, Nat, Nat, Text, Text)>();
+
+    for ((_, subscription) in subscriptions.entries()) {
+      let userPrincipal = subscription.principal;
+      let planId = subscription.planId;
+      let usedBytes = subscription.usedStorageBytes;
+      let storageLimit = subscription.storageLimitBytes;
+      let subscriptionStatus = getSubscriptionStatusText(subscription.status);
+
+      let planName = switch (plans.get(planId)) {
+        case (?plan) { "Plan " # plan.planId.toText() };
+        case (null) { "Unknown Plan" };
+      };
+
+      let userInfo = (userPrincipal, planName, usedBytes, storageLimit, subscriptionStatus, planId.toText());
+
+      userInfoList.add(userInfo);
+    };
+
+    userInfoList.toArray();
+  };
+
+  public query ({ caller }) func getAllUsersWithSubscriptionStatus() : async [(Principal, Text)] {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can view users with subscription status");
+    };
+
+    let userStatusList = List.empty<(Principal, Text)>();
+
+    for ((_, subscription) in subscriptions.entries()) {
+      let userPrincipal = subscription.principal;
+      let statusText = getSubscriptionStatusText(subscription.status);
+
+      userStatusList.add((userPrincipal, statusText));
+    };
+
+    userStatusList.toArray();
+  };
+
+  public query ({ caller }) func getSubscribedUsers() : async [SubscribedUserEntry] {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can access subscribed users list");
+    };
+
+    subscriptions.values().toArray().map(
+      func(sub : Subscription) : SubscribedUserEntry {
+        {
+          principal = sub.principal;
+          planId = sub.planId;
+          storageLimitBytes = sub.storageLimitBytes;
+          startTime = sub.startTime;
+          endTime = sub.endTime;
+          status = sub.status;
+        };
+      }
+    );
+  };
+
+  public query func getPlan(planId : Nat) : async ?Plan {
+    plans.get(planId);
+  };
+
+  public query ({ caller }) func getExtensionDetails(planId : Nat) : async (Text, Nat) {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can get extension details");
+    };
+
+    let principalText = caller.toText();
+
+    let existingSub = switch (subscriptions.get(principalText)) {
+      case (null) { Runtime.trap("No existing subscription found.") };
+      case (?sub) { sub };
+    };
+
+    if (existingSub.status == #active and Time.now() >= existingSub.endTime) {
+      Runtime.trap("Your subscription has expired! Please purchase a new one instead.");
+    };
+
+    if (existingSub.planId != planId) {
+      Runtime.trap("Plan id does not match with current subscription. (Id: " # existingSub.planId.toText() # " vs " # planId.toText() # ") ");
+    };
+
+    switch (plans.get(planId)) {
+      case (null) { Runtime.trap("Plan not found") };
+      case (?plan) {
+        if (not plan.active) {
+          Runtime.trap("Plan is not active");
+        };
+        switch (paymentDestination) {
+          case (null) { Runtime.trap("Payment destination not set") };
+          case (?dest) { (dest, plan.priceE8s) };
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func confirmExtendSubscription(newPlanId : Nat, blockIndex : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can extend subscriptions");
+    };
+
+    let principalText = caller.toText();
+
+    let existingSub = switch (subscriptions.get(principalText)) {
+      case (null) { Runtime.trap("No existing subscription found.") };
+      case (?sub) { sub };
+    };
+
+    if (existingSub.status == #active and Time.now() >= existingSub.endTime) {
+      Runtime.trap("Your subscription has expired! Please purchase a new one instead.");
+    };
+
+    if (existingSub.planId != newPlanId) {
+      Runtime.trap("Plan id does not match with current subscription. (Id: " # existingSub.planId.toText() # " vs " # newPlanId.toText() # ") ");
+    };
+
+    switch (plans.get(newPlanId)) {
+      case (null) { Runtime.trap("Plan not found") };
+      case (?plan) {
+        if (not plan.active) {
+          Runtime.trap("Plan is not active");
+        };
+
+        switch (processedBlocks.get(blockIndex)) {
+          case (?_) { Runtime.trap("Replay detected: block index already processed") };
+          case (null) { processedBlocks.add(blockIndex, true) };
+        };
+
+        let currentTime = Time.now();
+        let baseTime = switch (existingSub.status) {
+          case (#revoked) { currentTime };
+          case (#active) { existingSub.endTime };
+        };
+        let newEndTime = baseTime + (plan.durationSeconds * 1_000_000_000);
+
+        subscriptions.add(
+          principalText,
+          {
+            existingSub with
+            planId = newPlanId;
+            endTime = newEndTime;
+            status = #active;
+          },
+        );
+      };
+    };
+  };
+
+  func getSubscriptionStatusText(status : SubscriptionStatus) : Text {
+    switch (status) {
+      case (#active) { "Active" };
+      case (#revoked) { "Revoked" };
+    };
+  };
+};
