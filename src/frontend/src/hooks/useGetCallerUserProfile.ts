@@ -1,10 +1,14 @@
+import { createActor } from "@/backend";
+import { useActor, useInternetIdentity } from "@caffeineai/core-infrastructure";
 import { useQuery } from "@tanstack/react-query";
-import type { UserProfile } from "../backend";
-import { useActor } from "./useActor";
-import { useInternetIdentity } from "./useInternetIdentity";
+
+export interface UserProfile {
+  name: string;
+  email: string;
+}
 
 export function useGetCallerUserProfile() {
-  const { actor, isFetching: actorFetching } = useActor();
+  const { actor, isFetching: actorFetching } = useActor(createActor);
   const { identity } = useInternetIdentity();
 
   const query = useQuery<UserProfile | null>({

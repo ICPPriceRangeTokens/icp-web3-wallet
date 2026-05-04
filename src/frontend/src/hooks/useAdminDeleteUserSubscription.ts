@@ -1,9 +1,10 @@
+import { createActor } from "@/backend";
+import { useActor } from "@caffeineai/core-infrastructure";
 import { Principal } from "@dfinity/principal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useActor } from "./useActor";
 
 export function useAdminDeleteUserSubscription() {
-  const { actor } = useActor();
+  const { actor } = useActor(createActor);
   const queryClient = useQueryClient();
 
   return useMutation({

@@ -1,3 +1,4 @@
+import { createActor } from "@/backend";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,14 +9,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useActor } from "@caffeineai/core-infrastructure";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, User } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
-import { useActor } from "../hooks/useActor";
 
 export default function ProfileSetupModal() {
-  const { actor } = useActor();
+  const { actor } = useActor(createActor);
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

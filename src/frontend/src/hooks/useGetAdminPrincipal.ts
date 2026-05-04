@@ -1,9 +1,10 @@
+import { createActor } from "@/backend";
+import { useActor } from "@caffeineai/core-infrastructure";
 import type { Principal } from "@dfinity/principal";
 import { useQuery } from "@tanstack/react-query";
-import { useActor } from "./useActor";
 
 export function useGetAdminPrincipal() {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching } = useActor(createActor);
 
   return useQuery<Principal | null>({
     queryKey: ["adminPrincipal"],

@@ -12,11 +12,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Principal } from "@dfinity/principal";
 import {
+  Activity,
+  AlertCircle,
   Check,
   CheckCircle,
+  Cpu,
   CreditCard,
   Edit2,
   Plus,
+  RefreshCw,
   Settings,
   Shield,
   ShieldAlert,
@@ -42,6 +46,10 @@ import {
   useAdminUpdateSubscription,
   useRevokeSubscription,
 } from "../hooks/useAdminUsers";
+import {
+  formatTrillionCycles,
+  useGetCycleBalance,
+} from "../hooks/useGetCycleBalance";
 import { useGetPaymentDestination } from "../hooks/useGetPaymentDestination";
 import { useSetPaymentDestination } from "../hooks/useSetPaymentDestination";
 import { formatStorageSize, nanosecondsToDate } from "../utils/storage";
@@ -97,6 +105,8 @@ export default function AdminPanel() {
   const grantSubscription = useAdminUpdateSubscription();
 
   const [paymentDest, setPaymentDest] = useState("");
+  const getCycleBalance = useGetCycleBalance();
+  const [frontendCanisterId, setFrontendCanisterId] = useState("");
   const [grantPrincipal, setGrantPrincipal] = useState("");
   const [grantPlanId, setGrantPlanId] = useState("");
   const [grantError, setGrantError] = useState("");
@@ -321,7 +331,7 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="plans">
-        <TabsList className="nav-pill w-full grid grid-cols-3 gap-1 p-1.5 rounded-2xl h-auto border-0 bg-transparent">
+        <TabsList className="nav-pill w-full grid grid-cols-4 gap-1 p-1.5 rounded-2xl h-auto border-0 bg-transparent">
           <TabsTrigger
             value="plans"
             data-ocid="admin.plans.tab"
@@ -337,6 +347,14 @@ export default function AdminPanel() {
           >
             <Users className="w-4 h-4" />
             <span className="hidden sm:inline">Users</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="canisters"
+            data-ocid="admin.canisters.tab"
+            className="flex items-center gap-2 py-2.5 rounded-xl text-sm font-display font-bold data-[state=active]:gradient-teal data-[state=active]:text-primary-foreground data-[state=active]:shadow-teal-sm data-[state=inactive]:text-muted-foreground transition-all duration-200"
+          >
+            <Cpu className="w-4 h-4" />
+            <span className="hidden sm:inline">Canisters</span>
           </TabsTrigger>
           <TabsTrigger
             value="settings"
@@ -991,6 +1009,154 @@ export default function AdminPanel() {
               })}
             </div>
           )}
+        </TabsContent>
+
+        {/* ─── Canisters Tab ─── */}
+        <TabsContent value="canisters" className="space-y-4 mt-6">
+          <div>
+            <h2 className="font-display font-bold text-lg text-foreground">
+              Canister Health
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              View cycle balances for backend and frontend canisters
+            </p>
+          </div>
+
+          <div className="premium-card rounded-2xl p-5 space-y-4">
+            {/* Frontend canister ID slot */}
+            <div className="space-y-1.5">
+              <label
+                htmlFor="frontend-canister-id"
+                className="section-label block"
+              >
+                Frontend Canister ID
+              </label>
+              <input
+                id="frontend-canister-id"
+                type="text"
+                placeholder="Paste canister ID to query cycle balance"
+                value={frontendCanisterId}
+                onChange={(e) => setFrontendCanisterId(e.target.value)}
+                className="input-dark w-full px-3 py-2.5 font-mono text-sm"
+                data-ocid="admin.canisters.frontend_id.input"
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional \u2014 paste the frontend canister ID to query its
+                cycle balance via the backend.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center border border-primary/28"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, oklch(0.78 0.195 188 / 0.22), oklch(0.62 0.22 208 / 0.14))",
+                  }}
+                >
+                  <Activity className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <p className="font-display font-bold text-sm text-foreground">
+                    Cycle Balance
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Query live cycle balances for each canister
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                data-ocid="admin.canisters.check_button"
+                onClick={() =>
+                  getCycleBalance.mutate(frontendCanisterId || undefined)
+                }
+                disabled={getCycleBalance.isPending}
+                className="btn-teal flex items-center gap-2 px-4 py-2 rounded-xl text-sm disabled:opacity-60"
+              >
+                {getCycleBalance.isPending ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5" />
+                )}
+                {getCycleBalance.isPending
+                  ? "Checking..."
+                  : "Check Cycle Balance"}
+              </button>
+            </div>
+
+            {getCycleBalance.isError && (
+              <div
+                data-ocid="admin.canisters.error_state"
+                className="flex items-start gap-2 text-sm text-destructive bg-destructive/8 border border-destructive/20 rounded-xl px-3 py-2.5"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  {getCycleBalance.error instanceof Error
+                    ? getCycleBalance.error.message
+                    : "Failed to query cycle balances"}
+                </span>
+              </div>
+            )}
+
+            {getCycleBalance.data && (
+              <div className="space-y-3">
+                {getCycleBalance.data.map((canister) => (
+                  <div
+                    key={canister.label}
+                    data-ocid={`admin.canisters.${canister.label.toLowerCase().replace(/ /g, "_")}`}
+                    className="glass-card rounded-xl p-4 space-y-2"
+                  >
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Cpu className="w-3.5 h-3.5 text-primary/70" />
+                        <span className="font-display font-bold text-sm text-foreground">
+                          {canister.label}
+                        </span>
+                      </div>
+                      {canister.cycles !== null ? (
+                        <span className="text-sm font-bold text-success bg-success/10 border border-success/25 px-2.5 py-0.5 rounded-full">
+                          {formatTrillionCycles(canister.cycles)} cycles
+                        </span>
+                      ) : canister.error ? (
+                        <span className="text-xs text-warning bg-warning/10 border border-warning/25 px-2.5 py-0.5 rounded-full">
+                          Unavailable
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="space-y-1">
+                      <div>
+                        <span className="section-label">Canister ID</span>
+                        <p className="font-mono text-xs text-foreground/80 break-all mt-0.5">
+                          {canister.canisterId}
+                        </p>
+                      </div>
+                      {canister.error && (
+                        <div className="flex items-start gap-1.5 mt-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-warning/70 shrink-0 mt-0.5" />
+                          <p className="text-xs text-muted-foreground">
+                            {canister.error}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!getCycleBalance.data &&
+              !getCycleBalance.isPending &&
+              !getCycleBalance.isError && (
+                <div
+                  data-ocid="admin.canisters.empty_state"
+                  className="text-center py-6 text-sm text-muted-foreground"
+                >
+                  Click "Check Cycle Balance" to query canister health
+                </div>
+              )}
+          </div>
         </TabsContent>
 
         {/* ─── Settings Tab ─── */}

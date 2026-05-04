@@ -1,0 +1,135 @@
+// Version: 1.0.0
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type ExternalBlob__671167343 = Blob;
+type FileRecord__477306359 =
+  {
+    blobData : ExternalBlob__671167343;
+    contentType : Text;
+    fileId : Nat;
+    fileName : Text;
+    fileSize : Nat;
+    folderId : ?Nat;
+    ownerPrincipal : Principal;
+    uploadTime : Time__900049286
+  };
+type FolderRecord__699397301 =
+  {
+    createTime : Time__900049286;
+    folderId : Nat;
+    folderName : Text;
+    ownerPrincipal : Principal
+  };
+type Int__270357528 = Int__616954475;
+type Int__616954475 = Int;
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type List__415060402<T> = List__790383201<T>;
+type List__790383201<T> =
+  {
+    var blockIndex : Nat__490723111;
+    var blocks : [var [var ?T]];
+    var elementIndex : Nat__490723111
+  };
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type Plan__193983685 =
+  {
+    active : Bool;
+    durationSeconds : Nat;
+    planId : Nat;
+    priceE8s : Nat;
+    storageLimitBytes : Nat
+  };
+type StripeConfiguration__87721349 =
+  {allowedCountries : [Text]; secretKey : Text};
+type SubscriptionStatus__278950313 = {#active; #revoked};
+type Subscription__231062474 =
+  {
+    endTime : Time__900049286;
+    planId : Nat;
+    principal : Principal;
+    startTime : Time__900049286;
+    status : SubscriptionStatus__278950313;
+    storageLimitBytes : Nat;
+    usedStorageBytes : Nat
+  };
+type Time__796480547 = Int__270357528;
+type Time__900049286 = Time__796480547;
+type UserProfile__491224006 = {email : Text; name : Text};
+type UserRole__1073662873 = {#admin; #guest; #user};
+actor {
+  stable IC :
+    actor {
+      canister_status :
+        shared {canister_id : Principal} ->
+          async
+            {
+              cycles : Nat;
+              memory_size : Nat;
+              module_hash : ?Blob;
+              settings :
+                {
+                  compute_allocation : Nat;
+                  controllers : [Principal];
+                  freezing_threshold : Nat;
+                  memory_allocation : Nat
+                };
+              status : {#running; #stopped; #stopping}
+            }
+    };
+  stable accessControlState :
+    {
+      var adminAssigned : Bool;
+      userRoles : Map__605269027<Principal, UserRole__1073662873>
+    };
+  stable var adminPrincipal : ?Principal;
+  stable var files :
+    {
+      var root : Node__46230540<Nat, FileRecord__477306359>;
+      var size : Nat__490723111
+    };
+  stable var folders :
+    {
+      var root : Node__46230540<Nat, FolderRecord__699397301>;
+      var size : Nat__490723111
+    };
+  stable var nextFileId : Nat;
+  stable var nextFolderId : Nat;
+  stable var paymentDestination : ?Text;
+  stable var plans :
+    {
+      var root : Node__46230540<Nat, Plan__193983685>;
+      var size : Nat__490723111
+    };
+  stable var processedBlocks :
+    {var root : Node__46230540<Nat, Bool>; var size : Nat__490723111};
+  stable var stripeConfiguration : ?StripeConfiguration__87721349;
+  stable var subscriptions :
+    {
+      var root : Node__46230540<Text, Subscription__231062474>;
+      var size : Nat__490723111
+    };
+  stable var userFiles :
+    {
+      var root : Node__46230540<Text, List__415060402<Nat>>;
+      var size : Nat__490723111
+    };
+  stable var userFolders :
+    {
+      var root : Node__46230540<Text, List__415060402<Nat>>;
+      var size : Nat__490723111
+    };
+  stable userProfiles :
+    {
+      var root : Node__46230540<Principal, UserProfile__491224006>;
+      var size : Nat__490723111
+    }
+};

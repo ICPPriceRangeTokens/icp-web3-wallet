@@ -1,3 +1,4 @@
+import type { FileMetadata } from "@/backend";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +20,7 @@ import {
   FolderOpen,
   FolderPlus,
   Home,
+  Loader2,
   Lock,
   ShieldOff,
   Trash2,
@@ -26,7 +28,6 @@ import {
   X,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import type { FileMetadata } from "../backend";
 import UpgradePrompt from "../components/UpgradePrompt";
 import { useCreateFolder } from "../hooks/useCreateFolder";
 import { useDeleteFile } from "../hooks/useDeleteFile";
@@ -133,7 +134,7 @@ export default function FileManager({ onNavigateToPlans }: FileManagerProps) {
 
   const uploadFile = useUploadFile();
   const deleteFile = useDeleteFile();
-  const downloadFile = useDownloadFile();
+  const { download: downloadFile, isDownloading } = useDownloadFile();
   const createFolder = useCreateFolder();
   const renameFolder = useRenameFolder();
   const deleteFolder = useDeleteFolder();
@@ -704,15 +705,19 @@ export default function FileManager({ onNavigateToPlans }: FileManagerProps) {
                       data-ocid={`files.file.download_button.${idx + 1}`}
                       className="btn-ghost-teal flex items-center justify-center w-8 h-8 rounded-lg"
                       onClick={() =>
-                        downloadFile.mutate({
+                        downloadFile({
                           fileId: file.fileId,
                           fileName: file.fileName,
                         })
                       }
-                      disabled={downloadFile.isPending}
+                      disabled={isDownloading(file.fileId)}
                       title="Download file"
                     >
-                      <Download className="w-3.5 h-3.5" />
+                      {isDownloading(file.fileId) ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5" />
+                      )}
                     </button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -813,15 +818,19 @@ export default function FileManager({ onNavigateToPlans }: FileManagerProps) {
                     data-ocid={`files.file.download_button.${idx + 1}`}
                     className="btn-ghost-teal flex items-center justify-center w-8 h-8 rounded-lg"
                     onClick={() =>
-                      downloadFile.mutate({
+                      downloadFile({
                         fileId: BigInt(file.fileId),
                         fileName: file.fileName,
                       })
                     }
-                    disabled={downloadFile.isPending}
+                    disabled={isDownloading(BigInt(file.fileId))}
                     title="Download file"
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    {isDownloading(BigInt(file.fileId)) ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
                   </button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>

@@ -14,12 +14,6 @@ export class ExternalBlob {
     static fromBytes(blob: Uint8Array<ArrayBuffer>): ExternalBlob;
     withUploadProgress(onProgress: (percentage: number) => void): ExternalBlob;
 }
-export interface FolderRecord {
-    ownerPrincipal: Principal;
-    createTime: Time;
-    folderName: string;
-    folderId: bigint;
-}
 export interface Plan {
     active: boolean;
     planId: bigint;
@@ -46,11 +40,6 @@ export interface http_header {
     value: string;
     name: string;
 }
-export interface http_request_result {
-    status: bigint;
-    body: Uint8Array;
-    headers: Array<http_header>;
-}
 export interface Subscription {
     startTime: Time;
     status: SubscriptionStatus;
@@ -59,6 +48,11 @@ export interface Subscription {
     endTime: Time;
     planId: bigint;
     storageLimitBytes: bigint;
+}
+export interface http_request_result {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
 }
 export interface ShoppingItem {
     productName: string;
@@ -99,6 +93,12 @@ export interface UserProfile {
     name: string;
     email: string;
 }
+export interface FolderRecord {
+    ownerPrincipal: Principal;
+    createTime: Time;
+    folderName: string;
+    folderId: bigint;
+}
 export enum SubscriptionStatus {
     active = "active",
     revoked = "revoked"
@@ -129,9 +129,11 @@ export interface backendInterface {
     downloadFile(fileId: bigint): Promise<ExternalBlob | null>;
     getAdminPrincipal(): Promise<Principal | null>;
     getAllUsersWithSubscriptionStatus(): Promise<Array<[Principal, string]>>;
+    getBackendCycleBalance(): Promise<bigint>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getExtensionDetails(planId: bigint): Promise<[string, bigint]>;
+    getFrontendCycleBalance(canisterId: Principal): Promise<bigint>;
     getPaymentDestination(): Promise<string | null>;
     getPlan(planId: bigint): Promise<Plan | null>;
     getPurchaseDetails(planId: bigint): Promise<[string, bigint]>;

@@ -1,8 +1,9 @@
+import { createActor } from "@/backend";
+import { useActor } from "@caffeineai/core-infrastructure";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useActor } from "./useActor";
 
 export function useDeleteFile() {
-  const { actor } = useActor();
+  const { actor } = useActor(createActor);
   const queryClient = useQueryClient();
 
   return useMutation({

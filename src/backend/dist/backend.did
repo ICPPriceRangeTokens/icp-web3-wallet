@@ -1,0 +1,192 @@
+type http_request_result = 
+ record {
+   body: blob;
+   headers: vec http_header;
+   status: nat;
+ };
+type http_header = 
+ record {
+   name: text;
+   value: text;
+ };
+type _ImmutableObjectStorageRefillResult = 
+ record {
+   success: opt bool;
+   topped_up_amount: opt nat;
+ };
+type _ImmutableObjectStorageRefillInformation = record {
+                                                  proposed_top_up_amount:
+                                                   opt nat;};
+type _ImmutableObjectStorageCreateCertificateResult = 
+ record {
+   blob_hash: text;
+   method: text;
+ };
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+type UserProfile = 
+ record {
+   email: text;
+   name: text;
+ };
+type TransformationOutput = 
+ record {
+   body: blob;
+   headers: vec http_header;
+   status: nat;
+ };
+type TransformationInput = 
+ record {
+   context: blob;
+   response: http_request_result;
+ };
+type Time = int;
+type SubscriptionStatus = 
+ variant {
+   active;
+   revoked;
+ };
+type Subscription = 
+ record {
+   endTime: Time;
+   planId: nat;
+   "principal": principal;
+   startTime: Time;
+   status: SubscriptionStatus;
+   storageLimitBytes: nat;
+   usedStorageBytes: nat;
+ };
+type SubscribedUserEntry = 
+ record {
+   endTime: Time;
+   planId: nat;
+   "principal": principal;
+   startTime: Time;
+   status: SubscriptionStatus;
+   storageLimitBytes: nat;
+ };
+type StripeSessionStatus = 
+ variant {
+   completed: record {
+                response: text;
+                userPrincipal: opt text;
+              };
+   failed: record {error: text;};
+ };
+type StripeConfiguration = 
+ record {
+   allowedCountries: vec text;
+   secretKey: text;
+ };
+type ShoppingItem = 
+ record {
+   currency: text;
+   priceInCents: nat;
+   productDescription: text;
+   productName: text;
+   quantity: nat;
+ };
+type Plan = 
+ record {
+   active: bool;
+   durationSeconds: nat;
+   planId: nat;
+   priceE8s: nat;
+   storageLimitBytes: nat;
+ };
+type FolderRecord = 
+ record {
+   createTime: Time;
+   folderId: nat;
+   folderName: text;
+   ownerPrincipal: principal;
+ };
+type FileMetadata = 
+ record {
+   contentType: text;
+   fileId: nat;
+   fileName: text;
+   fileSize: nat;
+   folderId: opt nat;
+   ownerPrincipal: principal;
+   uploadTime: Time;
+ };
+type ExternalBlob = blob;
+service : {
+  _immutableObjectStorageBlobsAreLive: (hashes: vec blob) -> (vec bool) query;
+  _immutableObjectStorageBlobsToDelete: () -> (vec blob) query;
+  _immutableObjectStorageConfirmBlobDeletion: (blobs: vec blob) -> ();
+  _immutableObjectStorageCreateCertificate: (blobHash: text) ->
+   (_ImmutableObjectStorageCreateCertificateResult);
+  _immutableObjectStorageRefillCashier: (refillInformation:
+   opt _ImmutableObjectStorageRefillInformation) ->
+   (_ImmutableObjectStorageRefillResult);
+  _immutableObjectStorageUpdateGatewayPrincipals: () -> ();
+  _initializeAccessControl: () -> ();
+  activateSubscription: (planId: nat, blockIndex: nat) -> ();
+  adminDeleteFile: (fileId: nat) -> (bool);
+  adminDeleteUserFiles: (userPrincipal: principal) -> ();
+  adminDeleteUserSubscription: (user: principal) -> ();
+  adminListUsers: () -> (vec Subscription) query;
+  adminRevokeSubscription: (user: principal) -> ();
+  adminSetSubscription: ("principal": principal, planId: nat, startTime:
+   Time, endTime: Time, status: SubscriptionStatus) -> (bool);
+  adminViewUserInfos: () ->
+   (vec record {
+          principal;
+          text;
+          nat;
+          nat;
+          text;
+          text;
+        }) query;
+  assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  checkHasActiveSubscription: (user: principal) -> (bool) query;
+  confirmExtendSubscription: (newPlanId: nat, blockIndex: nat) -> ();
+  createCheckoutSession: (items: vec ShoppingItem, successUrl: text,
+   cancelUrl: text) -> (text);
+  createFolder: (folderName: text) -> (nat);
+  createPlan: (plan: Plan) -> (bool);
+  deleteFile: (fileId: nat) -> (bool);
+  deleteFolder: (folderId: nat) -> ();
+  deletePlan: (planId: nat) -> (bool);
+  downloadFile: (fileId: nat) -> (opt ExternalBlob) query;
+  getAdminPrincipal: () -> (opt principal) query;
+  getAllUsersWithSubscriptionStatus: () ->
+   (vec record {
+          principal;
+          text;
+        }) query;
+  getBackendCycleBalance: () -> (nat) query;
+  getCallerUserProfile: () -> (opt UserProfile) query;
+  getCallerUserRole: () -> (UserRole) query;
+  getExtensionDetails: (planId: nat) -> (text, nat) query;
+  getFrontendCycleBalance: (canisterId: principal) -> (nat);
+  getPaymentDestination: () -> (opt text) query;
+  getPlan: (planId: nat) -> (opt Plan) query;
+  getPurchaseDetails: (planId: nat) -> (text, nat) query;
+  getStripeSessionStatus: (sessionId: text) -> (StripeSessionStatus);
+  getSubscribedUsers: () -> (vec SubscribedUserEntry) query;
+  getSubscription: () -> (opt Subscription) query;
+  getUserProfile: (user: principal) -> (opt UserProfile) query;
+  isCallerAdmin: () -> (bool) query;
+  isStripeConfigured: () -> (bool) query;
+  listFiles: () -> (vec FileMetadata) query;
+  listFilesInFolder: (folderId: nat) -> (vec FileMetadata) query;
+  listPlans: () -> (vec Plan) query;
+  listUserFolders: () -> (vec FolderRecord) query;
+  purchaseSubscription: (planId: nat) -> (text, nat) query;
+  renameFolder: (folderId: nat, newName: text) -> ();
+  saveCallerUserProfile: (profile: UserProfile) -> ();
+  setAdminPrincipal: (admin: principal) -> ();
+  setPaymentDestination: (destination: text) -> ();
+  setStripeConfiguration: (config: StripeConfiguration) -> ();
+  transform: (input: TransformationInput) -> (TransformationOutput) query;
+  updatePlan: (plan: Plan) -> (bool);
+  uploadFile: (fileName: text, contentType: text, blobData: ExternalBlob,
+   folderId: opt nat, fileSize: nat) -> (opt nat);
+}

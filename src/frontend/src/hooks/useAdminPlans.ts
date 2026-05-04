@@ -1,6 +1,14 @@
+import { createActor } from "@/backend";
+import { useActor } from "@caffeineai/core-infrastructure";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Plan } from "../backend";
-import { useActor } from "./useActor";
+
+export interface Plan {
+  planId: bigint;
+  storageLimitBytes: bigint;
+  durationSeconds: bigint;
+  priceE8s: bigint;
+  active: boolean;
+}
 
 export interface SerializedPlan {
   planId: string;
@@ -21,7 +29,7 @@ function serializePlan(p: Plan): SerializedPlan {
 }
 
 export function useListAllPlans() {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching } = useActor(createActor);
 
   return useQuery<SerializedPlan[]>({
     queryKey: ["plans"],
@@ -35,7 +43,7 @@ export function useListAllPlans() {
 }
 
 export function useCreatePlan() {
-  const { actor } = useActor();
+  const { actor } = useActor(createActor);
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -56,7 +64,7 @@ export function useCreatePlan() {
 }
 
 export function useUpdatePlan() {
-  const { actor } = useActor();
+  const { actor } = useActor(createActor);
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -77,7 +85,7 @@ export function useUpdatePlan() {
 }
 
 export function useDeletePlan() {
-  const { actor } = useActor();
+  const { actor } = useActor(createActor);
   const queryClient = useQueryClient();
 
   return useMutation({

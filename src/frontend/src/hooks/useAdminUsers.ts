@@ -1,7 +1,9 @@
+import { createActor } from "@/backend";
+import { useActor } from "@caffeineai/core-infrastructure";
 import { Principal } from "@dfinity/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { SubscriptionStatus } from "../backend";
-import { useActor } from "./useActor";
+
+import { SubscriptionStatus } from "@/backend";
 
 export interface SerializedSubscription {
   principal: string;
@@ -14,7 +16,7 @@ export interface SerializedSubscription {
 }
 
 export function useAdminListUsers() {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching } = useActor(createActor);
 
   return useQuery<SerializedSubscription[]>({
     queryKey: ["adminUsers"],
@@ -36,7 +38,7 @@ export function useAdminListUsers() {
 }
 
 export function useAdminUpdateSubscription() {
-  const { actor } = useActor();
+  const { actor } = useActor(createActor);
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -72,7 +74,7 @@ export function useAdminUpdateSubscription() {
 }
 
 export function useRevokeSubscription() {
-  const { actor } = useActor();
+  const { actor } = useActor(createActor);
   const queryClient = useQueryClient();
 
   return useMutation({

@@ -1,7 +1,7 @@
+import { useInternetIdentity } from "@caffeineai/core-infrastructure";
 import { useQuery } from "@tanstack/react-query";
 import { e8sToIcp } from "../utils/icp";
 import { createLedgerActor } from "../utils/ledger";
-import { useInternetIdentity } from "./useInternetIdentity";
 
 export const ICP_BALANCE_QUERY_KEY = "balance";
 

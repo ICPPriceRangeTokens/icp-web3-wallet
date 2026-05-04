@@ -1,6 +1,6 @@
+import { createActor } from "@/backend";
+import { useActor, useInternetIdentity } from "@caffeineai/core-infrastructure";
 import { useQuery } from "@tanstack/react-query";
-import { useActor } from "./useActor";
-import { useInternetIdentity } from "./useInternetIdentity";
 
 export interface SerializedFolder {
   folderId: string;
@@ -10,7 +10,7 @@ export interface SerializedFolder {
 }
 
 export function useListFolders() {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching } = useActor(createActor);
   const { identity } = useInternetIdentity();
 
   return useQuery<SerializedFolder[]>({

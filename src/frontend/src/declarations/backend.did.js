@@ -8,14 +8,14 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
-export const _CaffeineStorageCreateCertificateResult = IDL.Record({
+export const _ImmutableObjectStorageCreateCertificateResult = IDL.Record({
   'method' : IDL.Text,
   'blob_hash' : IDL.Text,
 });
-export const _CaffeineStorageRefillInformation = IDL.Record({
+export const _ImmutableObjectStorageRefillInformation = IDL.Record({
   'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
 });
-export const _CaffeineStorageRefillResult = IDL.Record({
+export const _ImmutableObjectStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
@@ -111,33 +111,33 @@ export const TransformationOutput = IDL.Record({
 });
 
 export const idlService = IDL.Service({
-  '_caffeineStorageBlobIsLive' : IDL.Func(
-      [IDL.Vec(IDL.Nat8)],
-      [IDL.Bool],
+  '_immutableObjectStorageBlobsAreLive' : IDL.Func(
+      [IDL.Vec(IDL.Vec(IDL.Nat8))],
+      [IDL.Vec(IDL.Bool)],
       ['query'],
     ),
-  '_caffeineStorageBlobsToDelete' : IDL.Func(
+  '_immutableObjectStorageBlobsToDelete' : IDL.Func(
       [],
       [IDL.Vec(IDL.Vec(IDL.Nat8))],
       ['query'],
     ),
-  '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+  '_immutableObjectStorageConfirmBlobDeletion' : IDL.Func(
       [IDL.Vec(IDL.Vec(IDL.Nat8))],
       [],
       [],
     ),
-  '_caffeineStorageCreateCertificate' : IDL.Func(
+  '_immutableObjectStorageCreateCertificate' : IDL.Func(
       [IDL.Text],
-      [_CaffeineStorageCreateCertificateResult],
+      [_ImmutableObjectStorageCreateCertificateResult],
       [],
     ),
-  '_caffeineStorageRefillCashier' : IDL.Func(
-      [IDL.Opt(_CaffeineStorageRefillInformation)],
-      [_CaffeineStorageRefillResult],
+  '_immutableObjectStorageRefillCashier' : IDL.Func(
+      [IDL.Opt(_ImmutableObjectStorageRefillInformation)],
+      [_ImmutableObjectStorageRefillResult],
       [],
     ),
-  '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
-  '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  '_immutableObjectStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+  '_initializeAccessControl' : IDL.Func([], [], []),
   'activateSubscription' : IDL.Func([IDL.Nat, IDL.Nat], [], []),
   'adminDeleteFile' : IDL.Func([IDL.Nat], [IDL.Bool], []),
   'adminDeleteUserFiles' : IDL.Func([IDL.Principal], [], []),
@@ -189,9 +189,11 @@ export const idlService = IDL.Service({
       [IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Text))],
       ['query'],
     ),
+  'getBackendCycleBalance' : IDL.Func([], [IDL.Nat], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getExtensionDetails' : IDL.Func([IDL.Nat], [IDL.Text, IDL.Nat], ['query']),
+  'getFrontendCycleBalance' : IDL.Func([IDL.Principal], [IDL.Nat], []),
   'getPaymentDestination' : IDL.Func([], [IDL.Opt(IDL.Text)], ['query']),
   'getPlan' : IDL.Func([IDL.Nat], [IDL.Opt(Plan)], ['query']),
   'getPurchaseDetails' : IDL.Func([IDL.Nat], [IDL.Text, IDL.Nat], ['query']),
@@ -235,14 +237,14 @@ export const idlService = IDL.Service({
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
-  const _CaffeineStorageCreateCertificateResult = IDL.Record({
+  const _ImmutableObjectStorageCreateCertificateResult = IDL.Record({
     'method' : IDL.Text,
     'blob_hash' : IDL.Text,
   });
-  const _CaffeineStorageRefillInformation = IDL.Record({
+  const _ImmutableObjectStorageRefillInformation = IDL.Record({
     'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
   });
-  const _CaffeineStorageRefillResult = IDL.Record({
+  const _ImmutableObjectStorageRefillResult = IDL.Record({
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
@@ -332,33 +334,33 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
-    '_caffeineStorageBlobIsLive' : IDL.Func(
-        [IDL.Vec(IDL.Nat8)],
-        [IDL.Bool],
+    '_immutableObjectStorageBlobsAreLive' : IDL.Func(
+        [IDL.Vec(IDL.Vec(IDL.Nat8))],
+        [IDL.Vec(IDL.Bool)],
         ['query'],
       ),
-    '_caffeineStorageBlobsToDelete' : IDL.Func(
+    '_immutableObjectStorageBlobsToDelete' : IDL.Func(
         [],
         [IDL.Vec(IDL.Vec(IDL.Nat8))],
         ['query'],
       ),
-    '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+    '_immutableObjectStorageConfirmBlobDeletion' : IDL.Func(
         [IDL.Vec(IDL.Vec(IDL.Nat8))],
         [],
         [],
       ),
-    '_caffeineStorageCreateCertificate' : IDL.Func(
+    '_immutableObjectStorageCreateCertificate' : IDL.Func(
         [IDL.Text],
-        [_CaffeineStorageCreateCertificateResult],
+        [_ImmutableObjectStorageCreateCertificateResult],
         [],
       ),
-    '_caffeineStorageRefillCashier' : IDL.Func(
-        [IDL.Opt(_CaffeineStorageRefillInformation)],
-        [_CaffeineStorageRefillResult],
+    '_immutableObjectStorageRefillCashier' : IDL.Func(
+        [IDL.Opt(_ImmutableObjectStorageRefillInformation)],
+        [_ImmutableObjectStorageRefillResult],
         [],
       ),
-    '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
-    '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    '_immutableObjectStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+    '_initializeAccessControl' : IDL.Func([], [], []),
     'activateSubscription' : IDL.Func([IDL.Nat, IDL.Nat], [], []),
     'adminDeleteFile' : IDL.Func([IDL.Nat], [IDL.Bool], []),
     'adminDeleteUserFiles' : IDL.Func([IDL.Principal], [], []),
@@ -410,9 +412,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Text))],
         ['query'],
       ),
+    'getBackendCycleBalance' : IDL.Func([], [IDL.Nat], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getExtensionDetails' : IDL.Func([IDL.Nat], [IDL.Text, IDL.Nat], ['query']),
+    'getFrontendCycleBalance' : IDL.Func([IDL.Principal], [IDL.Nat], []),
     'getPaymentDestination' : IDL.Func([], [IDL.Opt(IDL.Text)], ['query']),
     'getPlan' : IDL.Func([IDL.Nat], [IDL.Opt(Plan)], ['query']),
     'getPurchaseDetails' : IDL.Func([IDL.Nat], [IDL.Text, IDL.Nat], ['query']),

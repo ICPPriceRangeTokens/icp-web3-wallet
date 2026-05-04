@@ -1,6 +1,8 @@
+import { createActor } from "@/backend";
+import { useActor } from "@caffeineai/core-infrastructure";
 import { useQuery } from "@tanstack/react-query";
-import { SubscriptionStatus } from "../backend";
-import { useActor } from "./useActor";
+
+import { SubscriptionStatus } from "@/backend";
 
 export interface SerializedSubscribedUser {
   principal: string;
@@ -12,7 +14,7 @@ export interface SerializedSubscribedUser {
 }
 
 export function useGetSubscribedUsers(isAdmin = false) {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching } = useActor(createActor);
 
   return useQuery<SerializedSubscribedUser[]>({
     queryKey: ["subscribedUsers"],

@@ -1,8 +1,9 @@
+import { createActor } from "@/backend";
+import { useActor } from "@caffeineai/core-infrastructure";
 import { useQuery } from "@tanstack/react-query";
-import { useActor } from "./useActor";
 
 export function useGetPaymentDestination() {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching } = useActor(createActor);
 
   return useQuery<string | null>({
     queryKey: ["paymentDestination"],

@@ -1,5 +1,6 @@
+import { createActor } from "@/backend";
+import { useActor } from "@caffeineai/core-infrastructure";
 import { useQuery } from "@tanstack/react-query";
-import { useActor } from "./useActor";
 
 export interface SerializedFileMetadata {
   fileId: string;
@@ -12,7 +13,7 @@ export interface SerializedFileMetadata {
 }
 
 export function useListFilesInFolder(folderId: string | null) {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching } = useActor(createActor);
 
   return useQuery<SerializedFileMetadata[]>({
     queryKey: ["filesInFolder", folderId],

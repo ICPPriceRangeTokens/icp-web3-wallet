@@ -1,5 +1,6 @@
+import { createActor } from "@/backend";
+import { useActor } from "@caffeineai/core-infrastructure";
 import { useQuery } from "@tanstack/react-query";
-import { useActor } from "./useActor";
 
 export type SerializedPlan = {
   planId: string;
@@ -10,7 +11,7 @@ export type SerializedPlan = {
 };
 
 export function useListPlans() {
-  const { actor, isFetching } = useActor();
+  const { actor, isFetching } = useActor(createActor);
 
   return useQuery<SerializedPlan[]>({
     queryKey: ["plans"],

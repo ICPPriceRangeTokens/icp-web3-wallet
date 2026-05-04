@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/sonner";
+import { useInternetIdentity } from "@caffeineai/core-infrastructure";
 import { Heart } from "lucide-react";
 import React, { useState } from "react";
 import AdminRoute from "./components/AdminRoute";
@@ -12,7 +13,6 @@ import SubscriptionStatus from "./components/SubscriptionStatus";
 import { WalletCard } from "./components/WalletCard";
 import { useGetCallerUserProfile } from "./hooks/useGetCallerUserProfile";
 import { useGetICPBalance } from "./hooks/useGetICPBalance";
-import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { useIsAdmin } from "./hooks/useIsAdmin";
 import AdminPanel from "./pages/AdminPanel";
 import FileManager from "./pages/FileManager";

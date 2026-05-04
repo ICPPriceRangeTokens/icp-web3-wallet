@@ -1,9 +1,9 @@
+import { useInternetIdentity } from "@caffeineai/core-infrastructure";
 import { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { icpToE8s } from "../utils/icp";
 import { createLedgerActor, formatTransferError } from "../utils/ledger";
 import { ICP_BALANCE_QUERY_KEY } from "./useGetICPBalance";
-import { useInternetIdentity } from "./useInternetIdentity";
 
 interface SendICPParams {
   recipientPrincipal: string;

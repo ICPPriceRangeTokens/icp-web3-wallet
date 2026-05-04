@@ -1,9 +1,10 @@
+import { createActor } from "@/backend";
+import type { FileMetadata } from "@/backend";
+import { useActor } from "@caffeineai/core-infrastructure";
 import { useQuery } from "@tanstack/react-query";
-import type { FileMetadata } from "../backend";
-import { useActor } from "./useActor";
 
 export function useListFiles() {
-  const { actor, isFetching: actorFetching } = useActor();
+  const { actor, isFetching: actorFetching } = useActor(createActor);
 
   return useQuery<FileMetadata[]>({
     queryKey: ["files"],

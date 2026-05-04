@@ -7,12 +7,13 @@ import Text "mo:core/Text";
 import Array "mo:core/Array";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
-import Storage "blob-storage/Storage";
-import Stripe "stripe/stripe";
-import OutCall "http-outcalls/outcall";
-import MixinAuthorization "authorization/MixinAuthorization";
-import MixinStorage "blob-storage/Mixin";
-import AccessControl "authorization/access-control";
+import Storage "mo:caffeineai-object-storage/Storage";
+import Stripe "mo:caffeineai-stripe/stripe";
+import OutCall "mo:caffeineai-http-outcalls/outcall";
+import MixinAuthorization "mo:caffeineai-authorization/MixinAuthorization";
+import MixinObjectStorage "mo:caffeineai-object-storage/Mixin";
+import AccessControl "mo:caffeineai-authorization/access-control";
+import Cycles "mo:base/ExperimentalCycles";
 
 actor {
   var plans : Map.Map<Nat, Plan> = Map.empty<Nat, Plan>();
@@ -30,7 +31,7 @@ actor {
 
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
-  include MixinStorage();
+  include MixinObjectStorage();
 
   public shared ({ caller }) func setAdminPrincipal(admin : Principal) : async () {
     if (not AccessControl.isAdmin(accessControlState, caller)) {
@@ -1007,6 +1008,36 @@ actor {
         );
       };
     };
+  };
+
+  public query ({ caller }) func getBackendCycleBalance() : async Nat {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can view cycle balance");
+    };
+    Cycles.balance();
+  };
+
+  let IC = actor "aaaaa-aa" : actor {
+    canister_status : shared ({ canister_id : Principal }) -> async {
+      cycles : Nat;
+      memory_size : Nat;
+      status : { #running; #stopping; #stopped };
+      settings : {
+        controllers : [Principal];
+        compute_allocation : Nat;
+        memory_allocation : Nat;
+        freezing_threshold : Nat;
+      };
+      module_hash : ?Blob;
+    };
+  };
+
+  public shared ({ caller }) func getFrontendCycleBalance(canisterId : Principal) : async Nat {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized");
+    };
+    let status = await IC.canister_status({ canister_id = canisterId });
+    status.cycles;
   };
 
   func getSubscriptionStatusText(status : SubscriptionStatus) : Text {

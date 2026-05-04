@@ -1,8 +1,8 @@
+import { createActor } from "@/backend";
+import { useActor, useInternetIdentity } from "@caffeineai/core-infrastructure";
 import { Principal } from "@dfinity/principal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createLedgerActor } from "../utils/ledger";
-import { useActor } from "./useActor";
-import { useInternetIdentity } from "./useInternetIdentity";
 
 const TRANSFER_FEE = 10_000n;
 
@@ -46,7 +46,7 @@ export interface ExtendParams {
 }
 
 export function useExtendSubscription() {
-  const { actor } = useActor();
+  const { actor } = useActor(createActor);
   const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
 

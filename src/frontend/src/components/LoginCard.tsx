@@ -1,6 +1,6 @@
+import { useInternetIdentity } from "@caffeineai/core-infrastructure";
 import { Cloud, HardDrive, Lock, ShieldCheck, Zap } from "lucide-react";
 import React from "react";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
 export default function LoginCard() {
   const { login, loginStatus } = useInternetIdentity();
